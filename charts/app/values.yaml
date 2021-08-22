@@ -8,7 +8,7 @@ image:
   repository: registry.cn-hangzhou.aliyuncs.com/pinecone_cdp/jvm-oom
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "jvm-8748ff62db-2"
+  tag: "jvm-40953c1c18-3"
 
 imagePullSecrets: []
 nameOverride: "jvm-oom"
@@ -23,7 +23,18 @@ resources:
     cpu: 50m
     memory: 500Mi
 
-javaOpts: "-XX:+UseSerialGC -XX:ErrorFile=/dump/hs_err_pid%p.log  -XX:HeapDumpPath=/dump -XX:+HeapDumpOnOutOfMemoryError"
+
+volumes:
+  - name: nfs-volume
+    nfs:
+      server: 172.18.8.103
+      path: /persistentvolumes
+
+volumeMounts:
+  - name: nfs-volume
+    mountPath: /nfs
+
+javaOpts: "-XX:+UseSerialGC"
 
 serviceAccount:
   # Specifies whether a service account should be created

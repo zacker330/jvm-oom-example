@@ -20,12 +20,10 @@ spec:
       labels:
         {{- include "app.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.volumes }}
       volumes:
-        - name: nfs-volume
-          nfs:
-            server: 172.18.8.103
-            path: /persistentvolumes
-
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -33,18 +31,66 @@ spec:
       serviceAccountName: {{ include "app.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: init
+          image: registry.cn-shenzhen.aliyuncs.com/aliacs-app-catalog/busybox:1.30.1
+          command: ['sh', '-c', 'echo $DUMP_FOLDER;mkdir -p $DUMP_FOLDER']
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: DUMP_FOLDER
+              value: "/nfs/dump/$(MY_POD_NAMESPACE)/{{ include "app.fullname" . }}/$(MY_POD_IP)"
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.volumeMounts }}
           volumeMounts:
-            - name: nfs-volume
-              mountPath: /dump/jvm-oom
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: DUMP_FOLDER
+              value: "/nfs/dump/$(MY_POD_NAMESPACE)/{{ include "app.fullname" . }}/$(MY_POD_IP)"
+            - name: DUMP_ARGS
+              value: "-XX:ErrorFile=$(DUMP_FOLDER)/hs_err_pid.log  -XX:HeapDumpPath=$(DUMP_FOLDER) -XX:+HeapDumpOnOutOfMemoryError"
             - name: JAVA_OPTS
-              value: "{{ .Values.javaOpts}}"
+              value: "{{.Values.javaOpts}} $(DUMP_ARGS)"
           ports:
             - name: http
               containerPort: 80
